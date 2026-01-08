@@ -4,7 +4,7 @@ import { logout } from './auth.controller.js';
 import { authenticate } from '../../middlewares/auth.middleware.js';
 const router = Router();
 
-router.post('/login', login);
+router.post('/login/', login);
 
 router.post(
     '/logout',
