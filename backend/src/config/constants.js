@@ -1,0 +1,12 @@
+export const USER_ROLES = {
+    ADMIN: 'ADMIN',
+    INVENTORY_MANAGER: 'INVENTORY_MANAGER',
+    WAREHOUSE_STAFF: 'WAREHOUSE_STAFF'
+};
+
+export const TRANSACTION_TYPES = {
+    IN: 'IN',
+    OUT: 'OUT',
+    MOVE: 'MOVE',
+    ADJUST: 'ADJUST'
+};

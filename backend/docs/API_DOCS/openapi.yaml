@@ -1,0 +1,536 @@
+openapi: 3.0.3
+
+info:
+  title: Inventory Management & Reorder Automation System (IMRAS)
+  description: |
+    API documentation for the IMRAS backend.
+
+    Architecture: Layered Modular Monolith
+    Authentication: JWT
+    Authorization: Role-Based Access Control (RBAC)
+
+    CORE INVARIANT:
+    - Stock is modified ONLY via stock_transactions
+  version: 1.0.0
+
+servers:
+  - url: http://localhost:3000/api
+    description: Local development server
+
+security:
+  - bearerAuth: []
+
+tags:
+  - name: Auth
+  - name: Master Data
+  - name: Procurement
+  - name: Movement
+  - name: Stock
+  - name: Reorder
+  - name: Reports
+  - name: Users
+
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+
+  schemas:
+
+    LoginRequest:
+      type: object
+      required: [email, password]
+      properties:
+        email: { type: string }
+        password: { type: string }
+
+    ItemRequest:
+      type: object
+      required: [sku, name, unit_of_measure, tracking_type]
+      properties:
+        sku: { type: string }
+        name: { type: string }
+        unit_of_measure: { type: string }
+        tracking_type:
+          type: string
+          enum: [NONE, BATCH, SERIAL]
+        reorder_point: { type: integer }
+        safety_stock: { type: integer }
+        lead_time_days: { type: integer }
+
+    WarehouseRequest:
+      type: object
+      required: [name]
+      properties:
+        name: { type: string }
+        location: { type: string }
+
+    LocationRequest:
+      type: object
+      required: [warehouse_id, code]
+      properties:
+        warehouse_id: { type: integer }
+        code: { type: string }
+
+    SupplierRequest:
+      type: object
+      required: [name]
+      properties:
+        name: { type: string }
+        contact_details: { type: string }
+        lead_time_days: { type: integer }
+
+    PRCreateRequest:
+      type: object
+      required: [items]
+      properties:
+        items:
+          type: array
+          items:
+            type: object
+            required: [item_id, quantity]
+            properties:
+              item_id: { type: integer }
+              quantity: { type: integer }
+
+    POCreateRequest:
+      type: object
+      required: [pr_id]
+      properties:
+        pr_id: { type: integer }
+
+    GRNRequest:
+      type: object
+      required: [po_id, warehouse_id, location_id, items]
+      properties:
+        po_id: { type: integer }
+        warehouse_id: { type: integer }
+        location_id: { type: integer }
+        items:
+          type: array
+          items:
+            type: object
+            required: [item_id, quantity, unit_cost]
+            properties:
+              item_id: { type: integer }
+              quantity: { type: integer }
+              unit_cost: { type: number }
+              batch_code: { type: string }
+              expiry_date:
+                type: string
+                format: date
+
+    IssueRequest:
+      type: object
+      required: [item_id, warehouse_id, location_id, quantity]
+      properties:
+        item_id: { type: integer }
+        warehouse_id: { type: integer }
+        location_id: { type: integer }
+        quantity: { type: integer }
+        batch_id: { type: integer }
+        serial_id: { type: integer }
+
+    TransferRequest:
+      type: object
+      required:
+        [item_id, from_warehouse_id, from_location_id, to_warehouse_id, to_location_id, quantity]
+      properties:
+        item_id: { type: integer }
+        from_warehouse_id: { type: integer }
+        from_location_id: { type: integer }
+        to_warehouse_id: { type: integer }
+        to_location_id: { type: integer }
+        quantity: { type: integer }
+
+    AdjustRequest:
+      type: object
+      required: [item_id, warehouse_id, location_id, quantity, reason]
+      properties:
+        item_id: { type: integer }
+        warehouse_id: { type: integer }
+        location_id: { type: integer }
+        quantity: { type: integer }
+        reason:
+          type: string
+          enum: [DAMAGE, EXPIRED, LOST, COUNT]
+
+paths:
+
+  /auth/login:
+    post:
+      tags: [Auth]
+      summary: Login
+      description: |
+        Role: Any active user
+        Effect: Issues JWT token
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/LoginRequest' }
+      responses:
+        '200': { description: JWT issued }
+        '401': { description: Invalid credentials }
+
+  /items:
+    post:
+      tags: [Master Data]
+      summary: Create item
+      description: |
+        Role: ADMIN
+        Effect: Creates item with unique SKU
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/ItemRequest' }
+      responses:
+        '201': { description: Item created }
+        '409': { description: Duplicate SKU }
+
+    get:
+      tags: [Master Data]
+      summary: List items
+      description: |
+        Role: ADMIN, INVENTORY_MANAGER
+        Effect: Read-only
+      responses:
+        '200': { description: Items returned }
+
+  /warehouses:
+    post:
+      tags: [Master Data]
+      summary: Create warehouse
+      description: |
+        Role: ADMIN
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/WarehouseRequest' }
+      responses:
+        '201': { description: Warehouse created }
+
+    get:
+      tags: [Master Data]
+      summary: List warehouses
+      description: |
+        Role: ADMIN, INVENTORY_MANAGER, WAREHOUSE_STAFF
+      responses:
+        '200': { description: Warehouses returned }
+
+  /locations:
+    post:
+      tags: [Master Data]
+      summary: Create location (bin)
+      description: |
+        Role: ADMIN
+        Constraint: Warehouse must exist
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/LocationRequest' }
+      responses:
+        '201': { description: Location created }
+
+    get:
+      tags: [Master Data]
+      summary: List locations
+      description: |
+        Role: All authenticated users
+      responses:
+        '200': { description: Locations returned }
+
+  /suppliers:
+    post:
+      tags: [Master Data]
+      summary: Create supplier
+      description: |
+        Role: ADMIN
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/SupplierRequest' }
+      responses:
+        '201': { description: Supplier created }
+
+    get:
+      tags: [Master Data]
+      summary: List suppliers
+      description: |
+        Role: ADMIN, INVENTORY_MANAGER
+      responses:
+        '200': { description: Suppliers returned }
+
+  /pr:
+    post:
+      tags: [Procurement]
+      summary: Create Purchase Requisition
+      description: |
+        Role: INVENTORY_MANAGER
+        Effect: PR created in DRAFT status
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/PRCreateRequest' }
+      responses:
+        '201': { description: PR created }
+
+    get:
+      tags: [Procurement]
+      summary: List Purchase Requisitions
+      description: |
+        Role: ADMIN, INVENTORY_MANAGER
+      responses:
+        '200': { description: PRs returned }
+
+  /pr/{id}/approve:
+    post:
+      tags: [Procurement]
+      summary: Approve Purchase Requisition
+      description: |
+        Role: ADMIN
+        Effect: PR status → APPROVED
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: integer }
+      responses:
+        '200': { description: PR approved }
+
+  /po:
+    post:
+      tags: [Procurement]
+      summary: Create Purchase Order
+      description: |
+        Role: ADMIN
+        Constraint: PR must be APPROVED
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/POCreateRequest' }
+      responses:
+        '201': { description: PO created }
+
+    get:
+      tags: [Procurement]
+      summary: List Purchase Orders
+      description: |
+        Role: ADMIN, INVENTORY_MANAGER
+      responses:
+        '200': { description: POs returned }
+
+  /po/{id}/approve:
+    post:
+      tags: [Procurement]
+      summary: Approve Purchase Order
+      description: |
+        Role: ADMIN
+        Effect: PO status → APPROVED
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: integer }
+      responses:
+        '200': { description: PO approved }
+
+  /grn:
+    post:
+      tags: [Procurement]
+      summary: Create Goods Receipt Note (ONLY stock-in)
+      description: |
+        Role: WAREHOUSE_STAFF
+        Constraint: PO must be APPROVED
+
+        Effects:
+        - Creates GRN
+        - Creates IN stock_transaction
+        - Updates stock snapshot
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/GRNRequest' }
+      responses:
+        '201': { description: GRN created and stock increased }
+
+  /issues:
+    post:
+      tags: [Movement]
+      summary: Issue stock
+      description: |
+        Role: WAREHOUSE_STAFF
+
+        Constraints:
+        - Stock ≥ quantity
+        - Batch not expired
+        - Serial available
+
+        Effects:
+        - Creates OUT stock_transaction
+        - Updates stock snapshot
+        - Triggers reorder evaluation
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/IssueRequest' }
+      responses:
+        '201': { description: Stock issued }
+        '400': { description: Insufficient stock }
+
+  /transfers:
+    post:
+      tags: [Movement]
+      summary: Transfer stock
+      description: |
+        Role: INVENTORY_MANAGER
+
+        Effects:
+        - MOVE OUT transaction (source)
+        - MOVE IN transaction (destination)
+        - Updates stock snapshot
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/TransferRequest' }
+      responses:
+        '201': { description: Stock transferred }
+
+  /stock:
+    get:
+      tags: [Stock]
+      summary: Get stock snapshot
+      description: |
+        Role: All authenticated users
+        Effect: Read-only
+      responses:
+        '200': { description: Stock snapshot returned }
+
+  /stock/transactions:
+    get:
+      tags: [Stock]
+      summary: Get stock ledger
+      description: |
+        Role: ADMIN, INVENTORY_MANAGER
+        Effect: Read-only audit trail
+      responses:
+        '200': { description: Transactions returned }
+
+  /stock/adjust:
+    post:
+      tags: [Stock]
+      summary: Adjust stock
+      description: |
+        Role: ADMIN
+
+        Effects:
+        - Creates ADJUST stock_transaction
+        - Updates stock snapshot
+        - Maintains audit trail
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/AdjustRequest' }
+      responses:
+        '201': { description: Stock adjusted }
+
+  /reorder-rules:
+    post:
+      tags: [Reorder]
+      summary: Create reorder rule
+      description: |
+        Role: ADMIN
+      responses:
+        '201': { description: Rule created }
+
+    get:
+      tags: [Reorder]
+      summary: List reorder rules
+      description: |
+        Role: ADMIN, INVENTORY_MANAGER
+      responses:
+        '200': { description: Rules returned }
+
+  /reorder/evaluate:
+    post:
+      tags: [Reorder]
+      summary: Evaluate reorder rules
+      description: |
+        Role: SYSTEM / ADMIN
+
+        Effects:
+        - Evaluates stock vs rules
+        - Creates PR drafts when required
+        - NO automatic PO creation
+      responses:
+        '200': { description: Evaluation complete }
+
+  /reports/stock-ageing:
+    get:
+      tags: [Reports]
+      summary: Stock ageing report
+      description: |
+        Role: ADMIN, INVENTORY_MANAGER
+        Derived from stock and batch expiry data.
+        Read-only. No system state changes.
+      responses:
+        '200': { description: Report returned }
+
+  /reports/abc:
+    get:
+      tags: [Reports]
+      summary: ABC analysis report
+      description: |
+        Role: ADMIN, INVENTORY_MANAGER
+        Derived from stock_transactions consumption data.
+        Read-only. No system state changes.
+      responses:
+        '200': { description: Report returned }
+
+  /reports/valuation:
+    get:
+      tags: [Reports]
+      summary: Stock valuation report
+      description: |
+        Role: ADMIN, INVENTORY_MANAGER
+        Derived from GRN costs and current stock.
+        Read-only. No system state changes.
+      responses:
+        '200': { description: Report returned }
+
+  /users:
+    get:
+      tags: [Users]
+      summary: List users
+      description: |
+        Role: ADMIN
+      responses:
+        '200': { description: Users returned }
+
+  /users/{id}/activate:
+    put:
+      tags: [Users]
+      summary: Activate or deactivate user
+      description: |
+        Role: ADMIN
+        Effect: Updates user active status
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: integer }
+      responses:
+        '200': { description: User status updated }

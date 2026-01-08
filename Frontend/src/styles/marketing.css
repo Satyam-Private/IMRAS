@@ -1,0 +1,16 @@
+.marketing {
+    --background: #ffffff;
+    --foreground: oklch(0.145 0 0);
+    --primary: #030213;
+}
+
+/* only applies inside landing/login */
+.marketing body {
+    background: var(--background);
+    color: var(--foreground);
+}
+
+/* animations, gradients, hero styles go here */
+.marketing .bg-gradient-hero {
+    background: linear-gradient(180deg, #f8fafc, #eef2f7);
+}
