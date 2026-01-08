@@ -10,7 +10,7 @@ import {
   Loader2
 } from "lucide-react";
 import api from "../api/api";
-import log_image from '../assets/login_image.jpg'
+import log_image from '../assets/Login_image.jpg'
 
 const LoginPage = ({ onLogin }) => {
   const navigate = useNavigate();
