@@ -51,7 +51,7 @@ const LoginPage = ({ onLogin }) => {
     setIsLoading(true);
 
     try {
-      const res = await api.post("/api/auth/login", {
+      const res = await api.post("/api/auth/login/", {
         email: email.trim(),
         password
       });
