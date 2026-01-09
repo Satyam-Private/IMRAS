@@ -22,7 +22,7 @@ import stockAgingRoutes from './modules/stock/stockAging.routes.js'
 const app = express();
 
 app.use(cors({
-    origin: 'https://imras.onrender.com/',
+    origin: 'https://imras.onrender.com',
     credentials: true
 }));
 console.log(process.env.DATABASE_URL);
